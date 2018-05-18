@@ -3,13 +3,8 @@
  */
 
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Windows.Media.Imaging;
-using System.Drawing.Imaging;
 using System.IO;
+using System.Windows.Media.Imaging;
 
 namespace ThaiNationalIDCard
 {
@@ -18,33 +13,20 @@ namespace ThaiNationalIDCard
         private string _personal;
         private string _address;
         private string _issue_expire;
-        private string _issuer;
         private string[] _th_personal;
         private string[] _en_personal;
 
-        private byte[] _photo_jpeg;
-
         public string Citizenid { get; set; }
 
-        public byte[] PhotoRaw
-        {
-            get
-            {
-                return _photo_jpeg;
-            }
-            set
-            {
-                _photo_jpeg = value;
-            }
-        }
+        public byte[] PhotoRaw { get; set; }
 
         public System.Drawing.Bitmap PhotoBitmap
         {
             get
             {
-                if (_photo_jpeg == null)
+                if (PhotoRaw == null)
                     return null;
-                JpegBitmapDecoder decoder = new JpegBitmapDecoder(new MemoryStream(_photo_jpeg), BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.Default);
+                JpegBitmapDecoder decoder = new JpegBitmapDecoder(new MemoryStream(PhotoRaw), BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.Default);
                 BitmapSource bitmapSource = decoder.Frames[0];
                 using (System.IO.MemoryStream outStream = new System.IO.MemoryStream())
                 {
@@ -86,7 +68,6 @@ namespace ThaiNationalIDCard
             }
         }
 
-
         public string addrVillageNo
         {
             get
@@ -94,7 +75,6 @@ namespace ThaiNationalIDCard
                 return _address.Split('#')[1].Trim();
             }
         }
-
 
         public string addrLane
         {
@@ -176,7 +156,7 @@ namespace ThaiNationalIDCard
             }
         }
 
-        public DateTime Birthday 
+        public DateTime Birthday
         {
             get
             {
@@ -187,7 +167,7 @@ namespace ThaiNationalIDCard
                 );
             }
         }
-        
+
         public string BirthdayYearString
         {
             get
@@ -251,6 +231,7 @@ namespace ThaiNationalIDCard
                 return _en_personal[1].Trim();
             }
         }
+
         public string En_Middlename
         {
             get
@@ -267,18 +248,6 @@ namespace ThaiNationalIDCard
             }
         }
 
-        public string Issuer
-        {
-            get
-            {
-                return _issuer;
-            }
-            set
-            {
-                _issuer = value;
-            }
-        }
-
-
+        public string Issuer { get; set; }
     }
 }

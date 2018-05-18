@@ -4,35 +4,37 @@
  * Require add refrernce(Nuget): PCSC ( http://www.nuget.org/packages/PCSC/ ) and PCSC.Iso7816 ( https://www.nuget.org/packages/PCSC.Iso7816/ )
  */
 
+using PCSC;
+using PCSC.Exceptions;
+using PCSC.Iso7816;
+using PCSC.Monitoring;
+using PCSC.Utils;
 using System;
+using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Text;
-using System.IO;
-using PCSC;
-using PCSC.Iso7816;
-using System.Diagnostics;
 using System.Threading;
-using PCSC.Monitoring;
-using PCSC.Exceptions;
-using PCSC.Utils;
 
 namespace ThaiNationalIDCard
 {
     public delegate void handlePhotoProgress(int value, int maximum);
+
     public delegate void handleCardInserted(Personal personal);
+
     public delegate void handleCardRemoved();
 
     public class ThaiIDCard
     {
-        const int ECODE_SCardError = 256;
-        const int ECODE_UNSUPPORT_CARD = 1;
+        private const int ECODE_SCardError = 256;
+        private const int ECODE_UNSUPPORT_CARD = 1;
 
         private static readonly IContextFactory _contextFactory = ContextFactory.Instance;
         private ISCardContext _hContext;
         private SCardReader _reader;
         private SCardError _err;
         private IntPtr _pioSendPci;
-        
+
         private IAPDU_THAILAND_IDCARD _apdu;
         private SCardMonitor _monitor;
 
@@ -40,8 +42,11 @@ namespace ThaiNationalIDCard
         private int _error_code;
 
         public event handlePhotoProgress eventPhotoProgress;
+
         public event handleCardInserted eventCardInserted;
+
         public event handleCardInserted eventCardInsertedWithPhoto;
+
         public event handleCardRemoved eventCardRemoved;
 
         public int ErrorCode()
@@ -81,15 +86,11 @@ namespace ThaiNationalIDCard
                 _error_message = "_Inserted Err: " + ex.Message + " (" + ex.SCardError.ToString() + ")";
                 Debug.Print(_error_message);
             }
-           
         }
 
         private void _Removed(string eventName, CardStatusEventArgs unknown)
         {
-            if (eventCardRemoved != null)
-            {
-                eventCardRemoved();
-            }
+            eventCardRemoved?.Invoke();
         }
 
         public bool MonitorStart(string readerName)
@@ -111,14 +112,13 @@ namespace ThaiNationalIDCard
                 return false;
             }
         }
+
         public bool MonitorStop(string readerName)
         {
             try
             {
-                if (_monitor != null)
-                    _monitor.Cancel();
+                _monitor?.Cancel();
                 return true;
-
             }
             catch (PCSCException ex)
             {
@@ -132,14 +132,15 @@ namespace ThaiNationalIDCard
         private void CheckErr(SCardError _err)
         {
             if (_err != SCardError.Success)
+            {
                 throw new PCSCException(_err,
-                    SCardHelper.StringifyError(_err));
+                   SCardHelper.StringifyError(_err));
+            }
         }
 
         private string GetUTF8FromAsciiBytes(byte[] ascii_bytes)
         {
-            byte[] utf8;
-            utf8 = Encoding.Convert(
+            byte[] utf8 = Encoding.Convert(
                 Encoding.GetEncoding("TIS-620"),
                 Encoding.UTF8,
                 ascii_bytes
@@ -150,40 +151,33 @@ namespace ThaiNationalIDCard
         private bool SelectApplet()
         {
             byte[] command = _apdu.APDU_SELECT(_apdu.AID_MOI);
-            byte[] pbRecvBuffer;
-            pbRecvBuffer = new byte[256];
+            byte[] pbRecvBuffer = new byte[256];
             _err = _reader.Transmit(_pioSendPci, command, ref pbRecvBuffer);
             CheckErr(_err);
             var responseApdu = new ResponseApdu(pbRecvBuffer, IsoCase.Case2Short, _reader.ActiveProtocol);
 
-            if (responseApdu.SW1.Equals((byte)SW1Code.NormalDataResponse) || responseApdu.SW1.Equals((byte)SW1Code.Normal))
-            {
-                return true;
-            }
-
-            return false;
+            return responseApdu.SW1.Equals((byte)SW1Code.NormalDataResponse) || responseApdu.SW1.Equals((byte)SW1Code.Normal);
         }
 
-        private byte[] SendCommand(byte [] command)
+        private byte[] SendCommand(byte[] command)
         {
-            byte[] pbRecvBuffer;
-            pbRecvBuffer = new byte[256];
+            byte[] pbRecvBuffer = new byte[256];
             _err = _reader.Transmit(_pioSendPci, command, ref pbRecvBuffer);
             CheckErr(_err);
             var responseApdu = new ResponseApdu(pbRecvBuffer, IsoCase.Case2Short, _reader.ActiveProtocol);
 
-            if(responseApdu.SW1.Equals((byte)SW1Code.NormalDataResponse))
+            if (responseApdu.SW1.Equals((byte)SW1Code.NormalDataResponse))
             {
                 command = _apdu.APDU_GET_RESPONSE().Concat(new byte[] { responseApdu.SW2 }).ToArray();
                 pbRecvBuffer = new byte[258];
                 _err = _reader.Transmit(_pioSendPci, command, ref pbRecvBuffer);
-                if(pbRecvBuffer.Length - responseApdu.SW2  == 2)
+                if (pbRecvBuffer.Length - responseApdu.SW2 == 2)
                 {
                     return pbRecvBuffer.Take(pbRecvBuffer.Length - 2).ToArray();
                 }
             }
 
-            return pbRecvBuffer;        
+            return pbRecvBuffer;
         }
 
         private byte[] SendPhotoCommand()
@@ -201,7 +195,6 @@ namespace ThaiNationalIDCard
             return s.ToArray();
         }
 
-
         public string[] GetReaders()
         {
             try
@@ -211,8 +204,11 @@ namespace ThaiNationalIDCard
                 _hContext.Release();
 
                 if (szReaders.Length <= 0)
+                {
                     throw new PCSCException(SCardError.NoReadersAvailable,
-                        "Could not find any Smartcard reader.");
+                       "Could not find any Smartcard reader.");
+                }
+
                 return szReaders;
             }
             catch (PCSCException ex)
@@ -220,10 +216,9 @@ namespace ThaiNationalIDCard
                 _error_code = ECODE_SCardError;
                 _error_message = "GetReaders Err: " + ex.Message + " (" + ex.SCardError.ToString() + ")";
                 Debug.Print(_error_message);
-                throw ex;
+                throw;
             }
         }
-
 
         public Boolean Open(string readerName = null)
         {
@@ -242,8 +237,10 @@ namespace ThaiNationalIDCard
                     // Retrieve the list of Smartcard _readers
                     string[] szReaders = _hContext.GetReaders();
                     if (szReaders.Length <= 0)
+                    {
                         throw new PCSCException(SCardError.NoReadersAvailable,
-                            "Could not find any Smartcard _reader.");
+                           "Could not find any Smartcard _reader.");
+                    }
 
                     _err = _reader.Connect(szReaders[0],
                                 SCardShareMode.Shared,
@@ -258,41 +255,40 @@ namespace ThaiNationalIDCard
                     CheckErr(_err);
                 }
 
-
                 _pioSendPci = new IntPtr();
                 switch (_reader.ActiveProtocol)
                 {
                     case SCardProtocol.T0:
                         _pioSendPci = SCardPCI.T0;
                         break;
+
                     case SCardProtocol.T1:
                         _pioSendPci = SCardPCI.T1;
                         break;
+
                     case SCardProtocol.Raw:
                         _pioSendPci = SCardPCI.Raw;
                         break;
+
                     default:
                         throw new PCSCException(SCardError.ProtocolMismatch,
                             "Protocol not supported: "
                             + _reader.ActiveProtocol.ToString());
                 }
 
-                string[] readerNames;
-                SCardProtocol proto;
-                SCardState state;
-                byte[] atr;
-
-                var sc = _reader.Status(
-                    out readerNames,    // contains the reader name(s)
-                    out state,          // contains the current state (flags)
-                    out proto,          // contains the currently used communication protocol
-                    out atr);           // contains the ATR
+                var sc = _reader.Status
+                (
+                    out string[] readerNames,    // contains the reader name(s)
+                    out SCardState state,          // contains the current state (flags)
+                    out SCardProtocol proto,          // contains the currently used communication protocol
+                    out byte[] atr           // contains the ATR
+                );
 
                 if (atr == null || atr.Length < 2)
                 {
                     return false;
                 }
-                
+
                 if (atr[0] == 0x3B && atr[1] == 0x67)
                 {
                     /* corruption card */
@@ -314,8 +310,6 @@ namespace ThaiNationalIDCard
                     _error_message = "SmartCard not support(Cannot select Ministry of Interior Applet.)";
                     return false;
                 }
-
-                
             }
             catch (PCSCException ex)
             {
@@ -363,7 +357,6 @@ namespace ThaiNationalIDCard
             Personal personal = new Personal();
             if (Open(readerName))
             {
-
                 // CID
                 personal.Citizenid = GetUTF8FromAsciiBytes(SendCommand(_apdu.EF_CID));
 
@@ -385,7 +378,6 @@ namespace ThaiNationalIDCard
                     personal.PhotoRaw = SendPhotoCommand();
                 }
 
-
                 Close();
                 return personal;
             }
@@ -396,10 +388,5 @@ namespace ThaiNationalIDCard
         {
             return readAll(true, readerName);
         }
-
-
-
     } // End class
-
-
 }
